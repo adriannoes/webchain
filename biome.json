@@ -1,0 +1,27 @@
+{
+  "files": {
+    "includes": [
+      "**",
+      "!**/.pnpm-store",
+      "!**/node_modules",
+      "!**/.next",
+      "!**/.turbo",
+      "!**/.output",
+      "!**/.wxt",
+      "!**/dist",
+      "!**/playwright-report",
+      "!**/test-results",
+      "!**/coverage"
+    ]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space"
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true
+    }
+  }
+}

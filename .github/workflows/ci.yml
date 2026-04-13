@@ -1,0 +1,59 @@
+# CI — ubuntu-latest, Node 22, pnpm from root packageManager.
+# Order: deps → (optional) Playwright browser cache restore → playwright install chromium → lint → typecheck → unit tests → coverage → integration tests → build.
+# Integration: @webchain/companion Vitest suite (real Chromium) via `pnpm test:integration` at repo root.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Lint, typecheck, test, integration, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.3
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+
+      - name: Install Playwright Chromium
+        run: pnpm --filter @webchain/runtime exec playwright install chromium
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Test
+        run: pnpm test
+
+      - name: Test coverage
+        run: pnpm test:coverage
+
+      - name: Integration tests
+        run: pnpm test:integration
+
+      - name: Build
+        run: pnpm build

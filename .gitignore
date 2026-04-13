@@ -1,0 +1,19 @@
+node_modules
+.pnpm-store
+.turbo
+.next
+.output
+.wxt
+dist
+playwright-report
+test-results
+coverage
+.env
+.env.local
+.DS_Store
+
+# Local tooling and internal docs
+.claude/
+.cursor/
+product/
+engineering/

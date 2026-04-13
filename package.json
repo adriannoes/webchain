@@ -1,0 +1,34 @@
+{
+  "name": "webchain",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.30.3",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "typecheck": "turbo typecheck",
+    "test": "turbo test",
+    "test:coverage": "turbo test:coverage",
+    "test:integration": "pnpm --filter @webchain/companion test:integration",
+    "lint": "biome check .",
+    "format": "biome format --write .",
+    "dev:web": "pnpm --filter @webchain/control-plane dev",
+    "dev:extension": "pnpm --filter @webchain/extension dev",
+    "dev:companion": "pnpm --filter @webchain/companion dev",
+    "dev:mcp": "pnpm --filter @webchain/mcp dev"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.6",
+    "@types/node": "^25.4.0",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "tsx": "^4.21.0",
+    "turbo": "^2.8.16",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18",
+    "@vitest/coverage-v8": "4.0.18"
+  }
+}
