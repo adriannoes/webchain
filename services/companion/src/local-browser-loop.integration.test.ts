@@ -34,7 +34,12 @@ describe("local browser loop (integration)", () => {
       headers: { "x-webchain-token": token },
     });
     expect(sessionRes.statusCode).toBe(200);
-    const { sessionId } = JSON.parse(sessionRes.body) as { sessionId: string };
+    const sessionBody = JSON.parse(sessionRes.body) as {
+      sessionId: string;
+      trace: { traceId: string };
+    };
+    const { sessionId } = sessionBody;
+    expect(sessionBody.trace.traceId.length).toBeGreaterThan(0);
 
     const nav = await app.inject({
       method: "POST",
@@ -56,10 +61,18 @@ describe("local browser loop (integration)", () => {
     });
     expect(snap.statusCode).toBe(200);
     const snapBody = JSON.parse(snap.body) as {
-      result: { htmlSnippet: string; title: string };
+      result: {
+        htmlSnippet: string;
+        title: string;
+        accessibilityTree?: unknown;
+        domSummary?: string;
+      };
+      trace: { traceId: string };
     };
     expect(snapBody.result.htmlSnippet.length).toBeGreaterThan(0);
     expect(snapBody.result.title.length).toBeGreaterThan(0);
+    expect(snapBody.result.accessibilityTree).toBeDefined();
+    expect(snapBody.trace.traceId.length).toBeGreaterThan(0);
 
     const close = await app.inject({
       method: "POST",

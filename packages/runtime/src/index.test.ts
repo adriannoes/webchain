@@ -26,16 +26,42 @@ function createMockBrowserTree() {
   const mockContent = vi.fn(() =>
     Promise.resolve("  <html>  <body> x </body>  "),
   );
+  const mockAriaSnapshot = vi.fn(() =>
+    Promise.resolve('- heading "mock" [level=1]'),
+  );
+  const mockEvaluate = vi.fn((fn: unknown) => {
+    if (typeof fn !== "function") {
+      return Promise.resolve(undefined);
+    }
+    const src = Function.prototype.toString.call(fn);
+    if (src.includes("innerText")) {
+      return Promise.resolve("hello summary");
+    }
+    if (src.includes("querySelector") && src.includes("role")) {
+      return Promise.resolve([]);
+    }
+    return Promise.resolve(undefined);
+  });
+  const mockEvalAnchors = vi.fn(
+    async (
+      _selector: string,
+      pageFunction: (anchors: unknown[], max: number) => unknown,
+      max: number,
+    ) => pageFunction([], max),
+  );
   const page = {
     goto: mockGoto,
     url: mockUrl,
     title: mockTitle,
     content: mockContent,
+    evaluate: mockEvaluate,
+    $$eval: mockEvalAnchors,
     locator: vi.fn(() => ({
       first: () => ({
         click: mockClick,
         fill: mockFill,
       }),
+      ariaSnapshot: mockAriaSnapshot,
     })),
   };
   const contextClose = vi.fn().mockResolvedValue(undefined);
@@ -55,6 +81,7 @@ function createMockBrowserTree() {
     mockGoto,
     mockClick,
     mockFill,
+    mockContent,
     contextClose,
     browserClose,
   };
@@ -111,7 +138,7 @@ describe("BrowserRuntime", () => {
     await rt.shutdown();
   });
 
-  it("snapshots HTML with summarizeHtml", async () => {
+  it("snapshots HTML with summarizeHtml and layered fields", async () => {
     const { browser } = createMockBrowserTree();
     mockChromiumLaunch.mockResolvedValueOnce(browser);
 
@@ -119,6 +146,10 @@ describe("BrowserRuntime", () => {
     const { sessionId } = await rt.createSession();
     const snap = await rt.snapshot({ action: "snapshot", sessionId });
     expect(snap.htmlSnippet.length).toBeLessThanOrEqual(1600);
+    expect(snap.domSummary).toBe("hello summary");
+    expect(snap.accessibilityTree).toBe('- heading "mock" [level=1]');
+    expect(snap.links).toEqual([]);
+    expect(snap.landmarks).toEqual([]);
     await rt.shutdown();
   });
 
@@ -177,6 +208,91 @@ describe("BrowserRuntime", () => {
       message: "net::ERR_FAILED",
     });
     await rt.shutdown();
+  });
+
+  it("maps snapshot content errors to COMMAND_FAILED", async () => {
+    const { browser, mockContent } = createMockBrowserTree();
+    mockContent.mockRejectedValueOnce(new Error("content-boom"));
+    mockChromiumLaunch.mockResolvedValueOnce(browser);
+
+    const rt = new BrowserRuntime({ headless: true });
+    try {
+      const { sessionId } = await rt.createSession();
+      await expect(
+        rt.snapshot({ action: "snapshot", sessionId }),
+      ).rejects.toMatchObject({
+        code: "COMMAND_FAILED",
+        message: "content-boom",
+      });
+    } finally {
+      await rt.shutdown();
+    }
+  });
+
+  it("maps click errors to COMMAND_FAILED", async () => {
+    const { browser, mockClick } = createMockBrowserTree();
+    mockClick.mockRejectedValueOnce(new Error("click-boom"));
+    mockChromiumLaunch.mockResolvedValueOnce(browser);
+
+    const rt = new BrowserRuntime({ headless: true });
+    try {
+      const { sessionId } = await rt.createSession();
+      await expect(
+        rt.click({
+          action: "click",
+          sessionId,
+          selector: "#x",
+        }),
+      ).rejects.toMatchObject({
+        code: "COMMAND_FAILED",
+        message: "click-boom",
+      });
+    } finally {
+      await rt.shutdown();
+    }
+  });
+
+  it("maps type (fill) errors to COMMAND_FAILED", async () => {
+    const { browser, mockFill } = createMockBrowserTree();
+    mockFill.mockRejectedValueOnce(new Error("fill-boom"));
+    mockChromiumLaunch.mockResolvedValueOnce(browser);
+
+    const rt = new BrowserRuntime({ headless: true });
+    try {
+      const { sessionId } = await rt.createSession();
+      await expect(
+        rt.type({
+          action: "type",
+          sessionId,
+          selector: "#x",
+          text: "a",
+        }),
+      ).rejects.toMatchObject({
+        code: "COMMAND_FAILED",
+        message: "fill-boom",
+      });
+    } finally {
+      await rt.shutdown();
+    }
+  });
+
+  it("maps closeSession context errors to COMMAND_FAILED", async () => {
+    const { browser, contextClose } = createMockBrowserTree();
+    contextClose.mockRejectedValueOnce(new Error("close-boom"));
+    mockChromiumLaunch.mockResolvedValueOnce(browser);
+
+    const rt = new BrowserRuntime({ headless: true });
+    try {
+      const { sessionId } = await rt.createSession();
+      await expect(
+        rt.closeSession({ action: "closeSession", sessionId }),
+      ).rejects.toMatchObject({
+        code: "COMMAND_FAILED",
+        message: "close-boom",
+      });
+    } finally {
+      await rt.shutdown();
+    }
   });
 
   it("closes a session and shuts down the browser", async () => {

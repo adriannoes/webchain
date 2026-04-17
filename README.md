@@ -57,7 +57,16 @@ Phase 1 in this codebase proves a reproducible **local browser loop**: **launch 
 
 - **Playwright docs:** [Installing browsers](https://playwright.dev/docs/browsers) (channels, CI, troubleshooting).
 
-**Integration test (real browser):** after installing Chromium, run `pnpm test:integration` from the repo root (companion HTTP loop — see [`services/companion`](services/companion)). Unit tests (`pnpm test`) stay fast and mostly mocked.
+**Integration test (real browser):** after installing Chromium, run `pnpm test:integration` from the repo root: companion HTTP loop ([`services/companion`](services/companion)) **and** MCP stdio conformance ([`services/mcp`](services/mcp)). You can run only MCP conformance with `pnpm test:mcp-conformance`. Unit tests (`pnpm test`) stay fast and mostly mocked.
+
+## MCP integrations (Phase 2)
+
+The MCP server **delegates** to the companion over HTTP (see [ADR-0001](product/ADRs/0001-session-authority-boundary.md)). Start **`pnpm dev:companion`** before **`pnpm dev:mcp`**.
+
+- **`WEBCHAIN_COMPANION_ORIGIN`** — default `http://127.0.0.1:8787` (see [`.env.example`](.env.example)).
+- **`WEBCHAIN_LOCAL_TOKEN`** — must match the companion process.
+
+Details: [`services/mcp/README.md`](services/mcp/README.md). Example integration notes for agent frameworks: [`examples/integrations/README.md`](examples/integrations/README.md).
 
 **macOS vs Linux (Phase 1 baseline):** local development is primarily **macOS**; **Linux** (including GitHub `ubuntu-latest` CI) runs **headless Chromium** with Playwright’s defaults. If the browser is missing, the runtime reports a **`BROWSER_NOT_INSTALLED`**-style error with the install hint; sandbox-specific issues on some Linux setups are rare on hosted runners but can be diagnosed from Playwright logs.
 
@@ -92,7 +101,7 @@ The initial slice focuses on a single loop:
 4. Start the local companion with `pnpm dev:companion`.
 5. Start the control plane with `pnpm dev:web`.
 6. Optionally run the extension with `pnpm dev:extension` (load unpacked from `apps/extension/.output/chrome-mv3`; companion must be up for **Ping companion** — see [`apps/extension/README.md`](apps/extension/README.md)).
-7. Optionally run the MCP server with `pnpm dev:mcp`.
+7. Optionally run the MCP server with `pnpm dev:mcp` (requires the companion running — see **MCP integrations** above).
 
 ### Companion ↔ control plane (health)
 
