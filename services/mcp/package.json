@@ -9,13 +9,17 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "start": "tsx src/index.ts",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",
     "@webchain/protocol": "workspace:*",
-    "@webchain/runtime": "workspace:*",
     "zod": "^4.3.6",
     "zod-to-json-schema": "^3.25.1"
+  },
+  "devDependencies": {
+    "@webchain/companion": "workspace:*",
+    "@webchain/runtime": "workspace:*"
   }
 }

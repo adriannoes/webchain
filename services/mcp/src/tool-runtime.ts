@@ -1,19 +1,28 @@
-import { NavigateArgsSchema, SessionIdArgsSchema } from "@webchain/protocol";
-import type { BrowserRuntime } from "@webchain/runtime";
+import {
+  ClickArgsSchema,
+  NavigateArgsSchema,
+  SessionIdArgsSchema,
+  TypeArgsSchema,
+} from "@webchain/protocol";
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
+import type { CompanionHttpClient } from "./companion-client.js";
+import { CompanionHttpError } from "./companion-client.js";
 
 const createSessionInputSchema = z.object({}).strict();
 
 const navigateInputJson = mcpToolInputSchema(NavigateArgsSchema);
 const sessionIdInputJson = mcpToolInputSchema(SessionIdArgsSchema);
 const createSessionInputJson = mcpToolInputSchema(createSessionInputSchema);
+const clickInputJson = mcpToolInputSchema(ClickArgsSchema);
+const typeInputJson = mcpToolInputSchema(TypeArgsSchema);
 
 export function getMcpToolDefinitions() {
   return [
     {
       name: "create_session",
-      description: "Create a new browser session owned by Webchain.",
+      description:
+        "Create a new browser session via the Webchain companion (single session authority).",
       inputSchema: createSessionInputJson,
     },
     {
@@ -23,8 +32,19 @@ export function getMcpToolDefinitions() {
     },
     {
       name: "snapshot",
-      description: "Capture a lightweight semantic snapshot from a session.",
+      description:
+        "Capture a layered semantic snapshot (HTML excerpt, DOM summary, accessibility tree, links).",
       inputSchema: sessionIdInputJson,
+    },
+    {
+      name: "click",
+      description: "Click an element matched by a CSS selector.",
+      inputSchema: clickInputJson,
+    },
+    {
+      name: "type",
+      description: "Fill text into an element matched by a CSS selector.",
+      inputSchema: typeInputJson,
     },
     {
       name: "close_session",
@@ -34,10 +54,24 @@ export function getMcpToolDefinitions() {
   ];
 }
 
+function stringifyMcpPayload(value: unknown): string {
+  try {
+    return JSON.stringify(
+      value,
+      (_key, v) => (typeof v === "bigint" ? v.toString() : v),
+      2,
+    );
+  } catch {
+    return JSON.stringify({
+      error: "Payload could not be serialized to JSON.",
+    });
+  }
+}
+
 export async function executeMcpToolCall(
   name: string,
   rawArgs: unknown,
-  runtime: BrowserRuntime,
+  client: CompanionHttpClient,
 ): Promise<{
   content: Array<{ type: "text"; text: string }>;
   isError?: boolean;
@@ -46,33 +80,84 @@ export async function executeMcpToolCall(
     switch (name) {
       case "create_session": {
         createSessionInputSchema.parse(rawArgs ?? {});
-        const session = await runtime.createSession();
+        const created = await client.createSession();
         return {
-          content: [{ type: "text", text: JSON.stringify(session, null, 2) }],
+          content: [{ type: "text", text: stringifyMcpPayload(created) }],
         };
       }
       case "navigate": {
         const args = NavigateArgsSchema.parse(rawArgs ?? {});
-        const result = await runtime.navigate({ action: "navigate", ...args });
+        const { trace, result } = await client.postCommand({
+          action: "navigate",
+          ...args,
+        });
         return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          content: [
+            {
+              type: "text",
+              text: stringifyMcpPayload({ trace, result }),
+            },
+          ],
         };
       }
       case "snapshot": {
         const args = SessionIdArgsSchema.parse(rawArgs ?? {});
-        const result = await runtime.snapshot({ action: "snapshot", ...args });
+        const { trace, result } = await client.postCommand({
+          action: "snapshot",
+          ...args,
+        });
         return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          content: [
+            {
+              type: "text",
+              text: stringifyMcpPayload({ trace, result }),
+            },
+          ],
+        };
+      }
+      case "click": {
+        const args = ClickArgsSchema.parse(rawArgs ?? {});
+        const { trace, result } = await client.postCommand({
+          action: "click",
+          ...args,
+        });
+        return {
+          content: [
+            {
+              type: "text",
+              text: stringifyMcpPayload({ trace, result }),
+            },
+          ],
+        };
+      }
+      case "type": {
+        const args = TypeArgsSchema.parse(rawArgs ?? {});
+        const { trace, result } = await client.postCommand({
+          action: "type",
+          ...args,
+        });
+        return {
+          content: [
+            {
+              type: "text",
+              text: stringifyMcpPayload({ trace, result }),
+            },
+          ],
         };
       }
       case "close_session": {
         const args = SessionIdArgsSchema.parse(rawArgs ?? {});
-        const result = await runtime.closeSession({
+        const { trace, result } = await client.postCommand({
           action: "closeSession",
-          ...args,
+          sessionId: args.sessionId,
         });
         return {
-          content: [{ type: "text", text: JSON.stringify(result, null, 2) }],
+          content: [
+            {
+              type: "text",
+              text: stringifyMcpPayload({ trace, result }),
+            },
+          ],
         };
       }
       default:
@@ -87,6 +172,26 @@ export async function executeMcpToolCall(
         };
     }
   } catch (error) {
+    if (error instanceof CompanionHttpError) {
+      const payload: Record<string, unknown> = {
+        error: error.message,
+      };
+      if (error.code) {
+        payload.code = error.code;
+      }
+      if (error.trace) {
+        payload.trace = error.trace;
+      }
+      return {
+        isError: true,
+        content: [
+          {
+            type: "text",
+            text: JSON.stringify(payload, null, 2),
+          },
+        ],
+      };
+    }
     return {
       isError: true,
       content: [
@@ -106,5 +211,6 @@ function mcpToolInputSchema(schema: z.ZodTypeAny) {
     $refStrategy: "none",
   }) as Record<string, unknown>;
   const { $schema: _schema, definitions: _defs, ...rest } = json;
-  return rest;
+  /** MCP SDK validates `inputSchema.type === "object"` for tools/list. */
+  return { ...rest, type: "object" as const };
 }

@@ -117,15 +117,19 @@ importers:
       '@webchain/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
-      '@webchain/runtime':
-        specifier: workspace:*
-        version: link:../../packages/runtime
       zod:
         specifier: ^4.3.6
         version: 4.3.6
       zod-to-json-schema:
         specifier: ^3.25.1
         version: 3.25.1(zod@4.3.6)
+    devDependencies:
+      '@webchain/companion':
+        specifier: workspace:*
+        version: link:../companion
+      '@webchain/runtime':
+        specifier: workspace:*
+        version: link:../../packages/runtime
 
 packages:
 

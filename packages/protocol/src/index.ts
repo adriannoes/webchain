@@ -60,8 +60,14 @@ export const NavigateArgsSchema = NavigateCommandSchema.omit({ action: true });
 /** MCP / HTTP args for tools that only need `sessionId` (e.g. snapshot, close_session). */
 export const SessionIdArgsSchema = SnapshotCommandSchema.omit({ action: true });
 
+/** MCP args for `click` / `type` tools (no `action` discriminant). */
+export const ClickArgsSchema = ClickCommandSchema.omit({ action: true });
+export const TypeArgsSchema = TypeCommandSchema.omit({ action: true });
+
 export type NavigateArgs = z.infer<typeof NavigateArgsSchema>;
 export type SessionIdArgs = z.infer<typeof SessionIdArgsSchema>;
+export type ClickArgs = z.infer<typeof ClickArgsSchema>;
+export type TypeArgs = z.infer<typeof TypeArgsSchema>;
 
 export const SessionCreatedSchema = z.object({
   sessionId: z.string().min(1),
@@ -71,22 +77,47 @@ export const SessionCreatedSchema = z.object({
 
 export type RuntimeSession = z.infer<typeof SessionCreatedSchema>;
 
+/** Optional layered fields (ADR-0002); `htmlSnippet` remains for Phase 1 compatibility. */
 export const SnapshotResultSchema = z.object({
   sessionId: z.string().min(1),
   url: z.string().url(),
   title: z.string(),
   htmlSnippet: z.string(),
+  domSummary: z.string().optional(),
+  /** Playwright accessibility tree (JSON-serializable). */
+  accessibilityTree: z.unknown().optional(),
+  links: z
+    .array(
+      z.object({
+        href: z.string(),
+        text: z.string(),
+      }),
+    )
+    .max(80)
+    .optional(),
+  landmarks: z
+    .array(
+      z.object({
+        role: z.string(),
+        name: z.string().optional(),
+      }),
+    )
+    .max(32)
+    .optional(),
+  traceId: z.string().uuid().optional(),
 });
 
 export const ActionResultSchema = z.object({
   sessionId: z.string().min(1),
   url: z.string().url(),
   title: z.string(),
+  traceId: z.string().uuid().optional(),
 });
 
 export const CloseSessionResultSchema = z.object({
   sessionId: z.string().min(1),
   closed: z.literal(true),
+  traceId: z.string().uuid().optional(),
 });
 
 export const CompanionHealthSchema = z.object({
@@ -132,6 +163,15 @@ export const TraceContextSchema = z.object({
 
 export type TraceContext = z.infer<typeof TraceContextSchema>;
 
+/** `POST /sessions` success body: session plus correlation trace (Phase 2). */
+export const SessionCreatedResponseSchema = SessionCreatedSchema.extend({
+  trace: TraceContextSchema,
+});
+
+export type SessionCreatedResponse = z.infer<
+  typeof SessionCreatedResponseSchema
+>;
+
 /**
  * JSON body for companion API errors on `/sessions` and `/commands`.
  * `code` is set when the runtime classified the failure; generic failures omit it.
@@ -158,3 +198,27 @@ export function createTraceContext(): TraceContext {
 export function isMutationCommand(command: RuntimeCommand) {
   return command.action === "click" || command.action === "type";
 }
+
+/** Structured lifecycle signal for operators (companion / MCP); optional in Phase 2. */
+export const SessionLifecycleEventSchema = z
+  .object({
+    kind: z.enum(["session_created", "session_closed", "command_error"]),
+    traceId: z.string().uuid(),
+    sessionId: z.string().optional(),
+    code: RuntimeErrorCodeSchema.optional(),
+  })
+  .strict();
+
+export type SessionLifecycleEvent = z.infer<typeof SessionLifecycleEventSchema>;
+
+/** Successful `POST /commands` body shape from companion. */
+export const CompanionCommandSuccessSchema = z
+  .object({
+    trace: TraceContextSchema,
+    result: z.unknown(),
+  })
+  .strict();
+
+export type CompanionCommandSuccess = z.infer<
+  typeof CompanionCommandSuccessSchema
+>;

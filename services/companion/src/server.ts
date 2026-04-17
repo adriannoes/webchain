@@ -6,6 +6,7 @@ import {
   RUNTIME_ACTIONS,
   RuntimeCommandSchema,
   type RuntimeErrorCode,
+  SessionCreatedResponseSchema,
   SessionCreatedSchema,
   type TraceContext,
 } from "@webchain/protocol";
@@ -114,7 +115,10 @@ export async function createCompanionApp(
     const trace = createTraceContext();
     try {
       const session = await options.runtime.createSession();
-      return SessionCreatedSchema.parse(session);
+      return SessionCreatedResponseSchema.parse({
+        ...SessionCreatedSchema.parse(session),
+        trace,
+      });
     } catch (error) {
       return sendRuntimeFailure(reply, error, trace);
     }
@@ -127,16 +131,41 @@ export async function createCompanionApp(
       const runtime = options.runtime;
 
       switch (command.action) {
-        case "navigate":
-          return { trace, result: await runtime.navigate(command) };
-        case "snapshot":
-          return { trace, result: await runtime.snapshot(command) };
-        case "click":
-          return { trace, result: await runtime.click(command) };
-        case "type":
-          return { trace, result: await runtime.type(command) };
-        case "closeSession":
-          return { trace, result: await runtime.closeSession(command) };
+        case "navigate": {
+          const result = await runtime.navigate(command);
+          return {
+            trace,
+            result: { ...result, traceId: trace.traceId },
+          };
+        }
+        case "snapshot": {
+          const result = await runtime.snapshot(command);
+          return {
+            trace,
+            result: { ...result, traceId: trace.traceId },
+          };
+        }
+        case "click": {
+          const result = await runtime.click(command);
+          return {
+            trace,
+            result: { ...result, traceId: trace.traceId },
+          };
+        }
+        case "type": {
+          const result = await runtime.type(command);
+          return {
+            trace,
+            result: { ...result, traceId: trace.traceId },
+          };
+        }
+        case "closeSession": {
+          const result = await runtime.closeSession(command);
+          return {
+            trace,
+            result: { ...result, traceId: trace.traceId },
+          };
+        }
       }
     } catch (error) {
       return sendRuntimeFailure(reply, error, trace);

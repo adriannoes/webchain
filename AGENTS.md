@@ -14,7 +14,9 @@ Strategic and product context lives here—not application source code.
 | `product/README.md` | Index of `product/` (foundation, ADRs, specs). |
 | `product/specs/prd-phase-0-foundation-alignment.md` | Phase 0 PRD — foundation/hardening scope. |
 | `product/specs/prd-phase-1-local-browser-loop.md` | Phase 1 PRD — prove local browser loop (launch, integration test, extension handshake). |
+| `product/specs/prd-phase-2-mcp-native-surface.md` | Phase 2 PRD — MCP parity, conformance, ADR-0001/0002, framework smoke tests. |
 | `engineering/tasks/tasks-prd-phase-1-local-browser-loop.md` | Task list for Phase 1. |
+| `engineering/tasks/tasks-prd-phase-2-mcp-native-surface.md` | Task list for Phase 2. |
 
 ## Engineering workflow (`engineering/`)
 
@@ -63,11 +65,12 @@ Before opening a PR or handing work off:
 2. `pnpm typecheck` — Turborepo `turbo typecheck`.
 3. `pnpm test` — Turborepo `turbo test` (Vitest in packages that define tests).
 4. `pnpm test:coverage` — Turborepo `turbo test:coverage` (line coverage thresholds per FR11).
-5. `pnpm test:integration` — companion local browser loop (requires Playwright Chromium installed; see root `README.md`).
+5. `pnpm test:integration` — companion local browser loop **and** MCP stdio conformance (requires Playwright Chromium installed; see root `README.md`).
+6. `pnpm test:mcp-conformance` — MCP integration tests only (subset of step 5).
 
 Fix failures until green. Add or update tests when changing behavior in `packages/protocol`, `packages/runtime`, or HTTP/MCP surfaces.
 
-**CI:** On push to `main` and on pull requests, GitHub Actions runs `pnpm lint`, `typecheck`, `test`, `test:coverage`, `test:integration` (Playwright Chromium + companion loop), and `build` on `ubuntu-latest` with Node 22 — see `.github/workflows/ci.yml`.
+**CI:** On push to `main` and on pull requests, GitHub Actions runs `pnpm lint`, `typecheck`, `test`, `test:coverage`, `test:integration` (Playwright Chromium + companion loop + MCP conformance), and `build` on `ubuntu-latest` with Node 22 — see `.github/workflows/ci.yml`.
 
 ## Architecture guardrails
 

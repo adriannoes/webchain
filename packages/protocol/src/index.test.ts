@@ -11,6 +11,7 @@ import {
   NavigateCommandSchema,
   RuntimeCommandSchema,
   RuntimeErrorCodeSchema,
+  SessionCreatedResponseSchema,
   SessionCreatedSchema,
   SessionIdArgsSchema,
   SnapshotResultSchema,
@@ -141,11 +142,27 @@ describe("result and health schemas", () => {
       url: "https://a.com",
       title: "t",
       htmlSnippet: "<p/>",
+      domSummary: "hello",
+      accessibilityTree: { role: "root" },
+      links: [{ href: "https://a.com/x", text: "x" }],
+      landmarks: [{ role: "main" }],
+      traceId: "00000000-0000-4000-8000-000000000001",
     });
     ActionResultSchema.parse({
       sessionId: "s",
       url: "https://a.com",
       title: "t",
+      traceId: "00000000-0000-4000-8000-000000000001",
+    });
+  });
+
+  it("parses session created response with trace", () => {
+    const trace = createTraceContext();
+    SessionCreatedResponseSchema.parse({
+      sessionId: "s",
+      pageId: "p",
+      createdAt: new Date().toISOString(),
+      trace,
     });
   });
 
