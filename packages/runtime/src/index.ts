@@ -211,16 +211,25 @@ export class BrowserRuntime {
   }
 
   async shutdown() {
-    await Promise.all(
-      [...this.sessions.values()].map(async (session) => {
-        await session.context.close();
+    const sessions = [...this.sessions.values()];
+    await Promise.allSettled(
+      sessions.map(async (session) => {
+        try {
+          await session.context.close();
+        } catch {
+          // Best-effort per-session teardown during shutdown.
+        }
       }),
     );
     this.sessions.clear();
 
     if (this.browserPromise) {
-      const browser = await this.browserPromise;
-      await browser.close();
+      try {
+        const browser = await this.browserPromise;
+        await browser.close();
+      } catch {
+        // Browser may already be closed.
+      }
       this.browserPromise = null;
     }
   }

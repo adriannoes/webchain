@@ -10,9 +10,12 @@ const runtime = new BrowserRuntime({
 const { app } = await createCompanionApp({ runtime });
 
 const closeGracefully = async () => {
-  await runtime.shutdown();
-  await app.close();
-  process.exit(0);
+  try {
+    await runtime.shutdown();
+  } finally {
+    await app.close();
+    process.exit(0);
+  }
 };
 
 process.on("SIGINT", closeGracefully);
