@@ -307,6 +307,44 @@ describe("BrowserRuntime", () => {
     expect(browserClose).toHaveBeenCalled();
   });
 
+  it("shuts down the browser even when a session context.close fails", async () => {
+    const failingClose = vi.fn().mockRejectedValue(new Error("close-boom"));
+    const okClose = vi.fn().mockResolvedValue(undefined);
+    const browserClose = vi.fn().mockResolvedValue(undefined);
+    const makeContext = (close: typeof failingClose) => ({
+      newPage: vi.fn(async () => ({
+        goto: vi.fn().mockResolvedValue(undefined),
+        url: vi.fn(() => "https://page.example"),
+        title: vi.fn(() => Promise.resolve("title")),
+        content: vi.fn(() => Promise.resolve("<html></html>")),
+        evaluate: vi.fn().mockResolvedValue(undefined),
+        $$eval: vi.fn().mockResolvedValue([]),
+        locator: vi.fn(() => ({
+          first: () => ({ click: vi.fn(), fill: vi.fn() }),
+          ariaSnapshot: vi.fn().mockResolvedValue(""),
+        })),
+      })),
+      close,
+    });
+    const browser = {
+      newContext: vi
+        .fn()
+        .mockResolvedValueOnce(makeContext(failingClose))
+        .mockResolvedValueOnce(makeContext(okClose)),
+      close: browserClose,
+    };
+    mockChromiumLaunch.mockResolvedValueOnce(browser);
+
+    const rt = new BrowserRuntime({ headless: true });
+    await rt.createSession();
+    await rt.createSession();
+    await rt.shutdown();
+
+    expect(failingClose).toHaveBeenCalled();
+    expect(okClose).toHaveBeenCalled();
+    expect(browserClose).toHaveBeenCalled();
+  });
+
   it("falls back to webkit when Chromium is not installed", async () => {
     const { browser } = createMockBrowserTree();
     mockChromiumLaunch.mockRejectedValueOnce(
