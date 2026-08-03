@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import {
   type ActionResult,
+  assertAllowedNavigateUrl,
   type ClickCommand,
   type CloseSessionCommand,
   type CloseSessionResult,
@@ -98,6 +99,7 @@ export class BrowserRuntime {
   async navigate(command: NavigateCommand): Promise<ActionResult> {
     const session = this.getSession(command.sessionId);
     try {
+      assertAllowedNavigateUrl(command.url);
       await session.page.goto(command.url, { waitUntil: "domcontentloaded" });
     } catch (error) {
       throw mapCommandFailure(error);
