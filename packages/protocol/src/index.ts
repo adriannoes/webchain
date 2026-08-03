@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { assertAllowedNavigateUrl } from "./navigate-url.js";
 
 export const RUNTIME_ACTIONS = [
   "navigate",
@@ -13,7 +14,20 @@ export type RuntimeAction = (typeof RUNTIME_ACTIONS)[number];
 export const NavigateCommandSchema = z.object({
   action: z.literal("navigate"),
   sessionId: z.string().min(1),
-  url: z.string().url(),
+  url: z
+    .string()
+    .url()
+    .superRefine((value, ctx) => {
+      try {
+        assertAllowedNavigateUrl(value);
+      } catch (error) {
+        ctx.addIssue({
+          code: "custom",
+          message:
+            error instanceof Error ? error.message : "invalid navigate url",
+        });
+      }
+    }),
 });
 
 export const SnapshotCommandSchema = z.object({
@@ -252,6 +266,8 @@ export const McpToolErrorEnvelopeSchema = z
   .strict();
 
 export type McpToolErrorEnvelope = z.infer<typeof McpToolErrorEnvelopeSchema>;
+
+export { assertAllowedNavigateUrl } from "./navigate-url.js";
 
 export function createTraceContext(): TraceContext {
   return TraceContextSchema.parse({

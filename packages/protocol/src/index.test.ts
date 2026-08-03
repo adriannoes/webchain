@@ -24,6 +24,24 @@ import {
 } from "./index.js";
 
 describe("RuntimeCommandSchema", () => {
+  it("rejects file and internal navigate targets", () => {
+    expect(() =>
+      NavigateCommandSchema.parse({
+        action: "navigate",
+        sessionId: "session-1",
+        url: "file:///etc/passwd",
+      }),
+    ).toThrow();
+
+    expect(() =>
+      NavigateCommandSchema.parse({
+        action: "navigate",
+        sessionId: "session-1",
+        url: "http://127.0.0.1:3000",
+      }),
+    ).toThrow();
+  });
+
   it("parses a valid navigate command", () => {
     const command = NavigateCommandSchema.parse({
       action: "navigate",
