@@ -83,6 +83,55 @@ describe("createCompanionApp", () => {
     await app.close();
   });
 
+  it("rejects an empty x-webchain-token header", async () => {
+    const { app } = await createCompanionApp({
+      runtime: mockRuntime(),
+      logger: false,
+      localToken: "secret",
+    });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/sessions",
+      headers: { "x-webchain-token": "" },
+    });
+
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it("refuses to boot when localToken is empty or whitespace", async () => {
+    await expect(
+      createCompanionApp({
+        runtime: mockRuntime(),
+        logger: false,
+        localToken: "",
+      }),
+    ).rejects.toThrow(/WEBCHAIN_LOCAL_TOKEN must be a non-empty string/);
+
+    await expect(
+      createCompanionApp({
+        runtime: mockRuntime(),
+        logger: false,
+        localToken: "   ",
+      }),
+    ).rejects.toThrow(/WEBCHAIN_LOCAL_TOKEN must be a non-empty string/);
+  });
+
+  it("refuses to boot when WEBCHAIN_LOCAL_TOKEN is empty", async () => {
+    vi.stubEnv("WEBCHAIN_LOCAL_TOKEN", "");
+    try {
+      await expect(
+        createCompanionApp({
+          runtime: mockRuntime(),
+          logger: false,
+        }),
+      ).rejects.toThrow(/WEBCHAIN_LOCAL_TOKEN must be a non-empty string/);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it("creates a session with valid token", async () => {
     const runtime = mockRuntime();
     const { app } = await createCompanionApp({

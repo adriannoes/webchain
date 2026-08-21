@@ -111,13 +111,43 @@ export type CreateCompanionAppOptions = {
   logger?: boolean;
 };
 
+const DEFAULT_LOCAL_DEV_TOKEN = "change-me-in-local-dev";
+
+/**
+ * `??` keeps empty strings from env/options, which previously matched an empty
+ * `x-webchain-token` header and authenticated as a valid local token.
+ *
+ * @example
+ * resolveCompanionLocalToken("secret")
+ */
+function resolveCompanionLocalToken(explicitToken: string | undefined): string {
+  const raw =
+    explicitToken ??
+    process.env.WEBCHAIN_LOCAL_TOKEN ??
+    DEFAULT_LOCAL_DEV_TOKEN;
+  const token = raw.trim();
+  if (token.length === 0) {
+    throw new Error(
+      `WEBCHAIN_LOCAL_TOKEN must be a non-empty string; received ${JSON.stringify(raw)}, expected a non-empty token`,
+    );
+  }
+  return token;
+}
+
+function presentedCompanionToken(
+  header: string | string[] | undefined,
+): string | undefined {
+  if (typeof header !== "string") {
+    return undefined;
+  }
+  const token = header.trim();
+  return token.length > 0 ? token : undefined;
+}
+
 export async function createCompanionApp(
   options: CreateCompanionAppOptions,
 ): Promise<{ app: FastifyInstance; localToken: string }> {
-  const localToken =
-    options.localToken ??
-    process.env.WEBCHAIN_LOCAL_TOKEN ??
-    "change-me-in-local-dev";
+  const localToken = resolveCompanionLocalToken(options.localToken);
 
   const app = Fastify({ logger: options.logger ?? true });
 
@@ -141,7 +171,7 @@ export async function createCompanionApp(
       return;
     }
 
-    const token = request.headers["x-webchain-token"];
+    const token = presentedCompanionToken(request.headers["x-webchain-token"]);
 
     if (token !== localToken) {
       return reply.code(401).send({
