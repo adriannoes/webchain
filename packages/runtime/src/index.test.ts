@@ -29,11 +29,14 @@ function createMockBrowserTree() {
   const mockAriaSnapshot = vi.fn(() =>
     Promise.resolve('- heading "mock" [level=1]'),
   );
-  const mockEvaluate = vi.fn((fn: unknown) => {
+  const mockEvaluate = vi.fn((fn: unknown, arg?: unknown) => {
     if (typeof fn !== "function") {
       return Promise.resolve(undefined);
     }
     const src = Function.prototype.toString.call(fn);
+    if (src.includes('type="password"')) {
+      return Promise.resolve(Array.isArray(arg) ? undefined : []);
+    }
     if (src.includes("innerText")) {
       return Promise.resolve("hello summary");
     }
@@ -82,6 +85,8 @@ function createMockBrowserTree() {
     mockClick,
     mockFill,
     mockContent,
+    mockEvaluate,
+    mockAriaSnapshot,
     contextClose,
     browserClose,
   };
@@ -139,7 +144,8 @@ describe("BrowserRuntime", () => {
   });
 
   it("snapshots HTML with summarizeHtml and layered fields", async () => {
-    const { browser } = createMockBrowserTree();
+    const { browser, mockEvaluate, mockContent, mockAriaSnapshot } =
+      createMockBrowserTree();
     mockChromiumLaunch.mockResolvedValueOnce(browser);
 
     const rt = new BrowserRuntime({ headless: true });
@@ -150,6 +156,14 @@ describe("BrowserRuntime", () => {
     expect(snap.accessibilityTree).toBe('- heading "mock" [level=1]');
     expect(snap.links).toEqual([]);
     expect(snap.landmarks).toEqual([]);
+    const blankCallOrder = mockEvaluate.mock.invocationCallOrder[0];
+    const contentOrder = mockContent.mock.invocationCallOrder[0];
+    const ariaOrder = mockAriaSnapshot.mock.invocationCallOrder[0];
+    expect(typeof blankCallOrder).toBe("number");
+    expect(typeof contentOrder).toBe("number");
+    expect(typeof ariaOrder).toBe("number");
+    expect(blankCallOrder as number).toBeLessThan(contentOrder as number);
+    expect(blankCallOrder as number).toBeLessThan(ariaOrder as number);
     await rt.shutdown();
   });
 
@@ -211,7 +225,7 @@ describe("BrowserRuntime", () => {
   });
 
   it("maps snapshot content errors to COMMAND_FAILED", async () => {
-    const { browser, mockContent } = createMockBrowserTree();
+    const { browser, mockContent, mockEvaluate } = createMockBrowserTree();
     mockContent.mockRejectedValueOnce(new Error("content-boom"));
     mockChromiumLaunch.mockResolvedValueOnce(browser);
 
@@ -224,6 +238,10 @@ describe("BrowserRuntime", () => {
         code: "COMMAND_FAILED",
         message: "content-boom",
       });
+      const restoreCalls = mockEvaluate.mock.calls.filter((call) =>
+        Array.isArray(call[1]),
+      );
+      expect(restoreCalls.length).toBeGreaterThan(0);
     } finally {
       await rt.shutdown();
     }
