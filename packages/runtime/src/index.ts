@@ -18,7 +18,11 @@ import {
   mapPlaywrightLaunchError,
   WebchainRuntimeError,
 } from "./runtime-error.js";
-import { extractLandmarks, extractPageLinks } from "./snapshot-helpers.js";
+import {
+  extractLandmarks,
+  extractPageLinks,
+  withPasswordFieldsRedacted,
+} from "./snapshot-helpers.js";
 
 export interface BrowserRuntimeOptions {
   headless?: boolean;
@@ -113,51 +117,9 @@ export class BrowserRuntime {
   async snapshot(command: SnapshotCommand): Promise<SnapshotResult> {
     const session = this.getSession(command.sessionId);
     try {
-      const page = session.page;
-      const html = await page.content();
-      /** Covers sync throws (some Playwright APIs throw before returning a Promise). */
-      const safe = async <T>(run: () => Promise<T>): Promise<T | undefined> => {
-        try {
-          return await run();
-        } catch {
-          return undefined;
-        }
-      };
-      const [accessibilityTree, domSummary, links, landmarks] =
-        await Promise.all([
-          /** Playwright 1.58+ removed `page.accessibility`; use ARIA snapshot on `body`. */
-          safe(() => page.locator("body").ariaSnapshot()),
-          safe(() =>
-            page.evaluate(() => {
-              const t = document.body?.innerText ?? "";
-              return t.replace(/\s+/g, " ").trim().slice(0, 2000);
-            }),
-          ),
-          safe(() => extractPageLinks(page, 80)),
-          safe(() => extractLandmarks(page)),
-        ]);
-      let accessibilityJson: unknown = accessibilityTree ?? undefined;
-      if (accessibilityJson !== undefined) {
-        try {
-          accessibilityJson = JSON.parse(
-            JSON.stringify(accessibilityJson, (_k, v) =>
-              typeof v === "bigint" ? v.toString() : v,
-            ),
-          );
-        } catch {
-          accessibilityJson = undefined;
-        }
-      }
-      return {
-        sessionId: command.sessionId,
-        url: page.url(),
-        title: await page.title(),
-        htmlSnippet: summarizeHtml(html),
-        domSummary,
-        accessibilityTree: accessibilityJson,
-        links,
-        landmarks,
-      };
+      return await withPasswordFieldsRedacted(session.page, () =>
+        capturePageSnapshot(session.page, command.sessionId),
+      );
     } catch (error) {
       throw mapCommandFailure(error);
     }
@@ -246,6 +208,55 @@ export {
   mapPlaywrightLaunchError,
   WebchainRuntimeError,
 } from "./runtime-error.js";
+
+async function capturePageSnapshot(
+  page: Page,
+  sessionId: string,
+): Promise<SnapshotResult> {
+  const html = await page.content();
+  /** Covers sync throws (some Playwright APIs throw before returning a Promise). */
+  const safe = async <T>(run: () => Promise<T>): Promise<T | undefined> => {
+    try {
+      return await run();
+    } catch {
+      return undefined;
+    }
+  };
+  const [accessibilityTree, domSummary, links, landmarks] = await Promise.all([
+    /** Playwright 1.58+ removed `page.accessibility`; use ARIA snapshot on `body`. */
+    safe(() => page.locator("body").ariaSnapshot()),
+    safe(() =>
+      page.evaluate(() => {
+        const t = document.body?.innerText ?? "";
+        return t.replace(/\s+/g, " ").trim().slice(0, 2000);
+      }),
+    ),
+    safe(() => extractPageLinks(page, 80)),
+    safe(() => extractLandmarks(page)),
+  ]);
+  let accessibilityJson: unknown = accessibilityTree ?? undefined;
+  if (accessibilityJson !== undefined) {
+    try {
+      accessibilityJson = JSON.parse(
+        JSON.stringify(accessibilityJson, (_k, v) =>
+          typeof v === "bigint" ? v.toString() : v,
+        ),
+      );
+    } catch {
+      accessibilityJson = undefined;
+    }
+  }
+  return {
+    sessionId,
+    url: page.url(),
+    title: await page.title(),
+    htmlSnippet: summarizeHtml(html),
+    domSummary,
+    accessibilityTree: accessibilityJson,
+    links,
+    landmarks,
+  };
+}
 
 export function summarizeHtml(html: string, limit = 1600) {
   return html.replace(/\s+/g, " ").trim().slice(0, limit);
