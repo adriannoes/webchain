@@ -138,6 +138,43 @@ describe("BrowserRuntime", () => {
     await rt.shutdown();
   });
 
+  it("disables Playwright process signal handlers so the host owns shutdown", async () => {
+    const { browser } = createMockBrowserTree();
+    mockChromiumLaunch.mockResolvedValueOnce(browser);
+
+    const rt = new BrowserRuntime({ headless: true });
+    await rt.createSession();
+    expect(mockChromiumLaunch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        headless: true,
+        handleSIGINT: false,
+        handleSIGTERM: false,
+        handleSIGHUP: false,
+      }),
+    );
+    await rt.shutdown();
+  });
+
+  it("disables Playwright signal handlers on webkit fallback launch", async () => {
+    const { browser } = createMockBrowserTree();
+    mockChromiumLaunch.mockRejectedValueOnce(
+      new Error("browserType.launch: Executable doesn't exist"),
+    );
+    mockWebkitLaunch.mockResolvedValueOnce(browser);
+
+    const rt = new BrowserRuntime({ headless: false });
+    await rt.createSession();
+    expect(mockWebkitLaunch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        headless: false,
+        handleSIGINT: false,
+        handleSIGTERM: false,
+        handleSIGHUP: false,
+      }),
+    );
+    await rt.shutdown();
+  });
+
   it("snapshots HTML with summarizeHtml and layered fields", async () => {
     const { browser } = createMockBrowserTree();
     mockChromiumLaunch.mockResolvedValueOnce(browser);

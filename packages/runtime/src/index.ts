@@ -50,19 +50,27 @@ export class BrowserRuntime {
   }
 
   private async launchBrowser() {
+    /**
+     * Companion/MCP own process lifecycle (SIGINT/SIGTERM → graceful shutdown).
+     * Playwright defaults handleSIGINT/TERM to true and will close the browser
+     * then process.exit(130) on SIGINT, racing the host signal handlers.
+     */
+    const launchOptions = {
+      headless: this.options.headless ?? true,
+      handleSIGINT: false,
+      handleSIGTERM: false,
+      handleSIGHUP: false,
+    } as const;
+
     try {
-      return await chromium.launch({
-        headless: this.options.headless ?? true,
-      });
+      return await chromium.launch(launchOptions);
     } catch (chromiumError) {
       if (!shouldFallbackToWebkit(chromiumError)) {
         throw mapPlaywrightLaunchError(chromiumError);
       }
 
       try {
-        return await webkit.launch({
-          headless: this.options.headless ?? true,
-        });
+        return await webkit.launch(launchOptions);
       } catch (webkitError) {
         throw mapPlaywrightLaunchError(webkitError);
       }
