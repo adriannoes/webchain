@@ -253,6 +253,8 @@ export const McpToolErrorEnvelopeSchema = z
 
 export type McpToolErrorEnvelope = z.infer<typeof McpToolErrorEnvelopeSchema>;
 
+export { assertAllowedNavigateUrl } from "./navigate-url.js";
+
 export function createTraceContext(): TraceContext {
   return TraceContextSchema.parse({
     traceId: crypto.randomUUID(),

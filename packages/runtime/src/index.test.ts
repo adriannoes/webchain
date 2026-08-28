@@ -65,9 +65,11 @@ function createMockBrowserTree() {
     })),
   };
   const contextClose = vi.fn().mockResolvedValue(undefined);
+  const mockRoute = vi.fn().mockResolvedValue(undefined);
   const context = {
     newPage: vi.fn(async () => page),
     close: contextClose,
+    route: mockRoute,
   };
   const browserClose = vi.fn().mockResolvedValue(undefined);
   const browser = {
@@ -82,6 +84,8 @@ function createMockBrowserTree() {
     mockClick,
     mockFill,
     mockContent,
+    mockUrl,
+    mockRoute,
     contextClose,
     browserClose,
   };
@@ -151,6 +155,73 @@ describe("BrowserRuntime", () => {
     expect(snap.links).toEqual([]);
     expect(snap.landmarks).toEqual([]);
     await rt.shutdown();
+  });
+
+  it("installs a session request guard on createSession", async () => {
+    const { browser, mockRoute } = createMockBrowserTree();
+    mockChromiumLaunch.mockResolvedValueOnce(browser);
+
+    const rt = new BrowserRuntime({ headless: true });
+    await rt.createSession();
+    expect(mockRoute).toHaveBeenCalledWith("**/*", expect.any(Function));
+    await rt.shutdown();
+  });
+
+  it("rejects click navigation onto a loopback url and restores the prior page", async () => {
+    const tree = createMockBrowserTree();
+    let currentUrl = "https://page.example/path";
+    tree.mockUrl.mockImplementation(() => currentUrl);
+    tree.mockClick.mockImplementation(async () => {
+      currentUrl = "http://127.0.0.1:65500/secret";
+    });
+    tree.mockGoto.mockImplementation(async (url: string) => {
+      currentUrl = url;
+    });
+    mockChromiumLaunch.mockResolvedValueOnce(tree.browser);
+
+    const rt = new BrowserRuntime({ headless: true });
+    try {
+      const { sessionId } = await rt.createSession();
+      await expect(
+        rt.click({
+          action: "click",
+          sessionId,
+          selector: "#to-internal",
+        }),
+      ).rejects.toMatchObject({
+        code: "COMMAND_FAILED",
+        message: expect.stringContaining("127.0.0.1:65500"),
+      });
+      expect(tree.mockGoto).toHaveBeenCalledWith("https://page.example/path", {
+        waitUntil: "domcontentloaded",
+      });
+      expect(currentUrl).toBe("https://page.example/path");
+    } finally {
+      await rt.shutdown();
+    }
+  });
+
+  it("does not snapshot a loopback page and restores about:blank", async () => {
+    const tree = createMockBrowserTree();
+    tree.mockUrl.mockReturnValue("http://127.0.0.1/secret");
+    mockChromiumLaunch.mockResolvedValueOnce(tree.browser);
+
+    const rt = new BrowserRuntime({ headless: true });
+    try {
+      const { sessionId } = await rt.createSession();
+      await expect(
+        rt.snapshot({ action: "snapshot", sessionId }),
+      ).rejects.toMatchObject({
+        code: "COMMAND_FAILED",
+        message: expect.stringContaining("127.0.0.1"),
+      });
+      expect(tree.mockContent).not.toHaveBeenCalled();
+      expect(tree.mockGoto).toHaveBeenCalledWith("about:blank", {
+        waitUntil: "domcontentloaded",
+      });
+    } finally {
+      await rt.shutdown();
+    }
   });
 
   it("clicks and types", async () => {
