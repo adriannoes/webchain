@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   ActionResultSchema,
+  assertAllowedNavigateUrl,
   CloseSessionResultSchema,
   CompanionApiErrorBodySchema,
   CompanionCommandSuccessSchema,
@@ -24,6 +25,12 @@ import {
 } from "./index.js";
 
 describe("RuntimeCommandSchema", () => {
+  it("re-exports navigate url policy used after click-driven navigation", () => {
+    expect(() => assertAllowedNavigateUrl("http://127.0.0.1/secret")).toThrow(
+      "not allowed",
+    );
+  });
+
   it("parses a valid navigate command", () => {
     const command = NavigateCommandSchema.parse({
       action: "navigate",

@@ -14,6 +14,10 @@ import {
 import type { Browser, BrowserContext, Page } from "playwright";
 import { chromium, webkit } from "playwright";
 import {
+  enforceAllowedPageUrl,
+  installSessionRequestGuard,
+} from "./navigation-guard.js";
+import {
   mapCommandFailure,
   mapPlaywrightLaunchError,
   WebchainRuntimeError,
@@ -74,6 +78,7 @@ export class BrowserRuntime {
     const context = await browser.newContext();
 
     try {
+      await installSessionRequestGuard(context);
       const page = await context.newPage();
       const sessionId = randomUUID();
       const pageId = randomUUID();
@@ -114,6 +119,7 @@ export class BrowserRuntime {
     const session = this.getSession(command.sessionId);
     try {
       const page = session.page;
+      await enforceAllowedPageUrl(page, "about:blank");
       const html = await page.content();
       /** Covers sync throws (some Playwright APIs throw before returning a Promise). */
       const safe = async <T>(run: () => Promise<T>): Promise<T | undefined> => {
@@ -165,8 +171,10 @@ export class BrowserRuntime {
 
   async click(command: ClickCommand): Promise<ActionResult> {
     const session = this.getSession(command.sessionId);
+    const previousUrl = session.page.url();
     try {
       await session.page.locator(command.selector).first().click();
+      await enforceAllowedPageUrl(session.page, previousUrl);
     } catch (error) {
       throw mapCommandFailure(error);
     }
@@ -180,8 +188,10 @@ export class BrowserRuntime {
 
   async type(command: TypeCommand): Promise<ActionResult> {
     const session = this.getSession(command.sessionId);
+    const previousUrl = session.page.url();
     try {
       await session.page.locator(command.selector).first().fill(command.text);
+      await enforceAllowedPageUrl(session.page, previousUrl);
     } catch (error) {
       throw mapCommandFailure(error);
     }

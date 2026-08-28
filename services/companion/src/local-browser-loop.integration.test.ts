@@ -1,3 +1,5 @@
+import http from "node:http";
+import type { AddressInfo } from "node:net";
 import { BrowserRuntime } from "@webchain/runtime";
 import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -95,5 +97,86 @@ describe("local browser loop (integration)", () => {
     };
     expect(errBody.code).toBe("SESSION_NOT_FOUND");
     expect(errBody.trace.traceId.length).toBeGreaterThan(0);
+  });
+
+  it("blocks click navigation onto loopback and does not snapshot victim html", async () => {
+    const marker = "WEBCHAIN_INTERNAL_MARKER_9f3c";
+    const victim = http.createServer((_request, response) => {
+      response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
+      response.end(`<html><body>${marker}</body></html>`);
+    });
+    await new Promise<void>((resolve) => {
+      victim.listen(0, "127.0.0.1", () => resolve());
+    });
+    const address = victim.address();
+    if (address === null || typeof address === "string") {
+      victim.close();
+      throw new Error("expected TCP address for victim server");
+    }
+    const { port } = address satisfies AddressInfo;
+
+    try {
+      const sessionRes = await app.inject({
+        method: "POST",
+        url: "/sessions",
+        headers: { "x-webchain-token": token },
+      });
+      expect(sessionRes.statusCode).toBe(200);
+      const sessionBody = JSON.parse(sessionRes.body) as { sessionId: string };
+      const { sessionId } = sessionBody;
+
+      const attackerHtml = `<!doctype html><a id="to-internal" href="http://127.0.0.1:${port}/secret">go</a>`;
+      const nav = await app.inject({
+        method: "POST",
+        url: "/commands",
+        headers: { "x-webchain-token": token },
+        payload: {
+          action: "navigate",
+          sessionId,
+          url: `data:text/html;charset=utf-8,${encodeURIComponent(attackerHtml)}`,
+        },
+      });
+      expect(nav.statusCode).toBe(200);
+
+      const click = await app.inject({
+        method: "POST",
+        url: "/commands",
+        headers: { "x-webchain-token": token },
+        payload: {
+          action: "click",
+          sessionId,
+          selector: "#to-internal",
+        },
+      });
+      expect(click.statusCode).toBe(502);
+      const clickBody = JSON.parse(click.body) as { code?: string };
+      expect(clickBody.code).toBe("COMMAND_FAILED");
+
+      const snap = await app.inject({
+        method: "POST",
+        url: "/commands",
+        headers: { "x-webchain-token": token },
+        payload: { action: "snapshot", sessionId },
+      });
+      expect(snap.statusCode).toBe(200);
+      expect(snap.body).not.toContain(marker);
+
+      await app.inject({
+        method: "POST",
+        url: "/commands",
+        headers: { "x-webchain-token": token },
+        payload: { action: "closeSession", sessionId },
+      });
+    } finally {
+      await new Promise<void>((resolve, reject) => {
+        victim.close((error) => {
+          if (error) {
+            reject(error);
+            return;
+          }
+          resolve();
+        });
+      });
+    }
   });
 });
