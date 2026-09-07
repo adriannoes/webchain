@@ -39,6 +39,15 @@ describe("mapCommandFailure", () => {
     expect(err.code).toBe("COMMAND_FAILED");
     expect(err.message).toContain("timed out");
   });
+
+  it("redacts URL userinfo from Playwright error messages", () => {
+    const err = mapCommandFailure(
+      new Error("net::ERR_FAILED at https://alice:s3cret@127.0.0.1/x"),
+    );
+    expect(err.code).toBe("COMMAND_FAILED");
+    expect(err.message).not.toContain("s3cret");
+    expect(err.message).toContain("https://127.0.0.1/x");
+  });
 });
 
 describe("isExecutableMissingMessage", () => {

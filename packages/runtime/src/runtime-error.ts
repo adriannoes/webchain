@@ -1,4 +1,5 @@
 import type { RuntimeErrorCode } from "@webchain/protocol";
+import { stripUserinfoFromText } from "./url-redact.js";
 
 const INSTALL_HINT =
   "Playwright browser binaries are missing. Run: pnpm --filter @webchain/runtime exec playwright install chromium";
@@ -57,10 +58,11 @@ export function mapCommandFailure(error: unknown): WebchainRuntimeError {
   }
 
   const message = error instanceof Error ? error.message : String(error);
+  const redacted = stripUserinfoFromText(message);
 
   return new WebchainRuntimeError(
     "COMMAND_FAILED",
-    message || "Command failed.",
+    redacted || "Command failed.",
     { cause: error },
   );
 }

@@ -19,6 +19,12 @@ import {
   WebchainRuntimeError,
 } from "./runtime-error.js";
 import { extractLandmarks, extractPageLinks } from "./snapshot-helpers.js";
+import {
+  stripUserinfoDeep,
+  stripUserinfoFromLinks,
+  stripUserinfoFromText,
+  stripUserinfoFromUrl,
+} from "./url-redact.js";
 
 export interface BrowserRuntimeOptions {
   headless?: boolean;
@@ -103,11 +109,7 @@ export class BrowserRuntime {
       throw mapCommandFailure(error);
     }
 
-    return {
-      sessionId: command.sessionId,
-      url: session.page.url(),
-      title: await session.page.title(),
-    };
+    return actionResult(command.sessionId, session.page);
   }
 
   async snapshot(command: SnapshotCommand): Promise<SnapshotResult> {
@@ -150,12 +152,15 @@ export class BrowserRuntime {
       }
       return {
         sessionId: command.sessionId,
-        url: page.url(),
+        url: stripUserinfoFromUrl(page.url()),
         title: await page.title(),
-        htmlSnippet: summarizeHtml(html),
-        domSummary,
-        accessibilityTree: accessibilityJson,
-        links,
+        htmlSnippet: stripUserinfoFromText(summarizeHtml(html)),
+        domSummary:
+          domSummary === undefined
+            ? undefined
+            : stripUserinfoFromText(domSummary),
+        accessibilityTree: stripUserinfoDeep(accessibilityJson),
+        links: links === undefined ? undefined : stripUserinfoFromLinks(links),
         landmarks,
       };
     } catch (error) {
@@ -171,11 +176,7 @@ export class BrowserRuntime {
       throw mapCommandFailure(error);
     }
 
-    return {
-      sessionId: command.sessionId,
-      url: session.page.url(),
-      title: await session.page.title(),
-    };
+    return actionResult(command.sessionId, session.page);
   }
 
   async type(command: TypeCommand): Promise<ActionResult> {
@@ -186,11 +187,7 @@ export class BrowserRuntime {
       throw mapCommandFailure(error);
     }
 
-    return {
-      sessionId: command.sessionId,
-      url: session.page.url(),
-      title: await session.page.title(),
-    };
+    return actionResult(command.sessionId, session.page);
   }
 
   async closeSession(
@@ -246,6 +243,17 @@ export {
   mapPlaywrightLaunchError,
   WebchainRuntimeError,
 } from "./runtime-error.js";
+
+async function actionResult(
+  sessionId: string,
+  page: Page,
+): Promise<ActionResult> {
+  return {
+    sessionId,
+    url: stripUserinfoFromUrl(page.url()),
+    title: await page.title(),
+  };
+}
 
 export function summarizeHtml(html: string, limit = 1600) {
   return html.replace(/\s+/g, " ").trim().slice(0, limit);
