@@ -82,6 +82,8 @@ function createMockBrowserTree() {
     mockClick,
     mockFill,
     mockContent,
+    mockUrl,
+    mockEvalAnchors,
     contextClose,
     browserClose,
   };
@@ -150,6 +152,46 @@ describe("BrowserRuntime", () => {
     expect(snap.accessibilityTree).toBe('- heading "mock" [level=1]');
     expect(snap.links).toEqual([]);
     expect(snap.landmarks).toEqual([]);
+    await rt.shutdown();
+  });
+
+  it("redacts URL userinfo from navigate and snapshot outputs", async () => {
+    const { browser, mockUrl, mockContent, mockEvalAnchors } =
+      createMockBrowserTree();
+    mockUrl.mockReturnValue("https://alice:s3cret@page.example/path");
+    mockContent.mockResolvedValue(
+      '<html><body><a href="https://alice:s3cret@page.example/x">x</a></body></html>',
+    );
+    mockEvalAnchors.mockImplementation(
+      async (
+        _selector: string,
+        pageFunction: (
+          anchors: { href: string; textContent: string }[],
+          max: number,
+        ) => unknown,
+        max: number,
+      ) =>
+        pageFunction(
+          [{ href: "https://alice:s3cret@page.example/x", textContent: "x" }],
+          max,
+        ),
+    );
+    mockChromiumLaunch.mockResolvedValueOnce(browser);
+
+    const rt = new BrowserRuntime({ headless: true });
+    const { sessionId } = await rt.createSession();
+    const nav = await rt.navigate({
+      action: "navigate",
+      sessionId,
+      url: "https://alice:s3cret@example.com/",
+    });
+    expect(nav.url).toBe("https://page.example/path");
+    expect(nav.url).not.toContain("s3cret");
+
+    const snap = await rt.snapshot({ action: "snapshot", sessionId });
+    expect(snap.url).toBe("https://page.example/path");
+    expect(snap.htmlSnippet).not.toContain("s3cret");
+    expect(snap.links?.[0]?.href).toBe("https://page.example/x");
     await rt.shutdown();
   });
 
